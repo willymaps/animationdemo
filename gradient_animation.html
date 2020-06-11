@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Display a map</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+<script src="https://api.mapbox.com/mapbox-gl-js/v1.10.1/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v1.10.1/mapbox-gl.css" rel="stylesheet" />
+<script src='https://unpkg.com/@turf/turf/turf.min.js'></script>
+<style>
+
+body {
+	margin: 0;
+	padding: 0;
+}
+
+button:focus {
+	outline:0;
+}
+
+
+#mapWrap {
+	height:750px;
+	position: relative;
+	/*max-width:600px;*/
+	margin:auto;
+	font-family: sans-serif;
+}
+
+.aniMap {
+	position: absolute;
+	bottom:0;
+	display: block;
+	width:100%;
+	height:100%;
+}
+
+#map {
+	height:100%;
+}
+
+#aniBtn {
+	position: absolute;
+	top: 10px;
+    right: 10px;
+    text-align: center;
+    margin: auto;
+    z-index: 10;
+    padding:20px 50px;
+    background:red;
+    font-size:16px;
+    font-weight:bold;
+    border-radius:3px;
+    border:none;
+    color:rgba(255,255,255,0.75);
+}
+
+#aniBtn:hover {
+	opacity:1;
+	color:rgba(255,255,255,1);
+	cursor: pointer;
+}
+
+
+</style>
+</head>
+<body>
+<div id="mapWrap">
+	<button id="aniBtn" onclick="createAnimation()">Animate</button>
+	<div id="map" class="aniMap"></div>
+</div>
+<script>
+
+let initLoad = true;
+let mapStyle = 'mapbox://styles/mapbox/light-v10';
+let mapCenter =	[-73.95854473114014, 40.79173543794739];
+
+let line = turf.lineString([
+		  [
+            -73.95824432373047,
+            40.80068603561921
+          ],
+          [
+            -73.94940376281738,
+            40.79691751000055
+          ],
+          [
+            -73.96099090576172,
+            40.78099637745177
+          ],
+          [
+            -73.96270751953125,
+            40.78151631145503
+          ],
+          [
+            -73.96339416503906,
+            40.78216622323578
+          ],
+          [
+            -73.96382331848145,
+            40.783141078983206
+          ],
+          [
+            -73.96571159362793,
+            40.78385596410417
+          ],
+          [
+            -73.96811485290527,
+            40.7848957832712
+          ],
+          [
+            -73.96948814392088,
+            40.78535069903749
+          ]
+]);
+
+// Put your own Mapbox Token in here
+mapboxgl.accessToken = 'token';
+
+const map = new mapboxgl.Map({
+	container: 'map',
+	style: mapStyle,
+	center: mapCenter,
+	minZoom: 5,
+	zoom: 14,
+	bearing: 29
+});
+
+map.on('load', function() {
+	initLineLayer(line);
+});
+
+function createAnimation() {
+
+	// calculate line distance
+	let lineDistance = turf.lineDistance(line);
+
+	// create an empty feature collection
+    let rectCollection = turf.featureCollection([]);
+
+    // how many points you want along the path (more = smoother animation)
+    let rects = 1000;
+
+    // get speed
+    let speed = 5;
+
+    // calculate the distance between each point on the path
+    let segments = lineDistance / rects;
+
+    // what units do you want to use?
+    let units = 'miles';
+
+    // based on the number of points...
+    for(let i = 0; i <= rects; i++) {
+
+        // calculate point location for each segment
+        let pointonline = turf.along(line, (segments * i));
+
+        // push these coordinates to the feature collection we created
+        rectCollection.features.push(pointonline);
+
+        // once 'i' equals the number of points then we're done building our line 
+        if (i == rects) {
+        	// if this is the initial load add our point layer
+        	if (initLoad) {
+        		// initPointLayer(rectCollection);
+        	}
+
+        	// function to animate line
+            moveLine(rectCollection, speed);
+        }
+    }
+
+}
+
+function moveLine(rects, speed) {
+
+	// animation loop
+	for (let i = 0; i <= rects.features.length-1; i++) {
+        (function(index) {
+
+            animateTimeout = setTimeout(function() {
+
+        				// we need at least two coordinates to make a linestring
+        				if (i >= 1) {
+
+                  let perc = i/rects.features.length;
+                  let percMax = perc+0.01;
+
+                  let lineGrad = [
+                    'interpolate',
+                    ['linear'],
+                    ['line-progress'],
+                    perc, 'red',
+                    percMax, 'white'
+                  ];
+
+                  map.setPaintProperty('line', 'line-gradient', lineGrad);
+    	          }
+
+  	            // if we're at the end of the loop...
+                if (i === rects.features.length-1) {
+                    console.log('done drawing');
+                }
+
+            // how quickly do we want to iterate through our animation
+            }, i * speed);
+        })(i);
+    }
+
+}
+
+
+function initLineLayer(line){
+	map.addSource('lineSource', {
+		type: 'geojson',
+		data: line,
+    lineMetrics: true,
+	});
+
+  map.addLayer({
+    type: 'line',
+    source: 'lineSource',
+    id: 'line',
+    paint: {
+      'line-width': 3,
+      // 'line-gradient' must be specified using an expression
+      // with the special 'line-progress' property
+      'line-gradient': [
+        'interpolate',
+          ['linear'],
+          ['line-progress'],
+            0,
+            'red',
+            1,
+            'red'
+      ]
+    },
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round'
+    }
+	});
+}
+
+function initPointLayer(rects){
+	initLoad = false;
+	map.addSource('pointSource', {
+		type: 'geojson',
+		data: rects
+	});
+
+	map.addLayer({
+		id: 'pointSource',
+		type: 'circle',
+		source: 'pointSource',
+		paint: {
+			'circle-radius': 4,
+			'circle-color': 'purple'
+		}
+	});
+}
+
+</script>
+ 
+</body>
+</html>
